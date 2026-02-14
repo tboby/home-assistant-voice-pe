@@ -1046,7 +1046,7 @@ script:
           if (id(is_timer_active)){
             id(fetch_first_active_timer).execute();
           }
-          id(check_if_alarmss_active).execute();
+          id(check_if_alarms_active).execute();
           if (id(is_alarm_active)){
             id(fetch_first_active_alarm).execute();
           }
