@@ -174,6 +174,14 @@ globals:
   - id: is_timer_active
     type: bool
     restore_value: false
+  # Global variable storing the first active alarm
+  - id: first_active_alarm
+    type: voice_assistant::Alarm
+    restore_value: false
+  # Global variable storing if an alarm is active
+  - id: is_alarm_active
+    type: bool
+    restore_value: false
   # Global variable storing if a factory reset was requested. If it is set to true, the device will factory reset once the center button is released
   - id: factory_reset_requested
     type: bool
@@ -1038,6 +1046,10 @@ script:
           if (id(is_timer_active)){
             id(fetch_first_active_timer).execute();
           }
+          id(check_if_alarmss_active).execute();
+          if (id(is_alarm_active)){
+            id(fetch_first_active_alarm).execute();
+          }
           if (id(improv_ble_in_progress)) {
             id(control_leds_improv_ble_state).execute();
           } else if (id(init_in_progress)) {
@@ -1068,6 +1080,8 @@ script:
             id(control_leds_voice_assistant_not_ready_phase).execute();
           } else if (id(is_timer_active)) {
             id(control_leds_timer_ticking).execute();
+          } else if (id(is_alarm_active)) {
+            id(control_leds_alarm_ticking).execute();
           } else if (id(master_mute_switch).state) {
             id(control_leds_muted_or_silent).execute();
           } else if (id(external_media_player).volume == 0.0f || id(external_media_player).is_muted()) {
@@ -1269,6 +1283,15 @@ script:
           id: voice_assistant_leds
           effect: "Timer tick"
 
+  # Script executed when the alarm is ticking, to control the LEDs
+  # The LEDs shows the remaining time as a fraction of the full ring.
+  - id: control_leds_alarm_ticking
+    then:
+      - light.turn_on:
+          brightness: !lambda return max( id(led_ring).current_values.get_brightness() , 0.2f );
+          id: voice_assistant_leds
+          effect: "Alarm tick"
+
   # Script executed when the volume is increased/decreased from the dial
   - id: control_volume
     mode: restart
@@ -1457,7 +1480,33 @@ script:
             }
           }
           id(is_timer_active) = output;
+  # Script used to fetch the first active alarm (Stored in global first_active_alarm)
+  - id: fetch_first_active_alarm
+    then:
+      - lambda: |
+          const auto alarms = id(va).get_alarms();
+          auto output_alarm = alarms.begin()->second;
+          for (auto &iterable_alarm : alarms) {
+            if (iterable_alarm.second.is_active && iterable_alarm.second.seconds_until_ring <= output_alarm.seconds_until_ring) {
+              output_alarm = iterable_alarm.second;
+            }
+          }
+          id(first_active_alarm) = output_alarm;
 
+  # Script used to check if a alarm is active (Stored in global is_alarm_active)
+  - id: check_if_alarms_active
+    then:
+      - lambda: |
+          const auto alarms = id(va).get_alarms();
+          bool output = false;
+          if (alarms.size() > 0) {
+            for (auto &iterable_alarm : alarms) {
+              if(iterable_alarm.second.is_active) {
+                output = true;
+              }
+            }
+          }
+          id(is_alarm_active) = output;
   # Script used activate the stop word if the TTS step is long.
   # Why is this wrapped on a script?
   #   Becasue we want to stop the sequence if the TTS step is faster than that.
@@ -1907,6 +1956,16 @@ voice_assistant:
   on_timer_updated:
     - script.execute: control_leds
   on_timer_tick:
+    - script.execute: control_leds
+  on_alarm_finished:
+    - switch.turn_on: timer_ringing
+  on_alarm_started:
+    - script.execute: control_leds
+  on_alarm_cancelled:
+    - script.execute: control_leds
+  on_alarm_updated:
+    - script.execute: control_leds
+  on_alarm_tick:
     - script.execute: control_leds
 
 button:
