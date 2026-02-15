@@ -1957,6 +1957,23 @@ voice_assistant:
     - script.execute: control_leds
   on_timer_tick:
     - script.execute: control_leds
+    - if:
+        condition:
+          lambda: |-
+            static uint32_t previous_active_zero_timers = 0;
+            uint32_t active_zero_timers = 0;
+
+            for (const auto &timer : timers) {
+              if (timer.is_active && timer.seconds_left == 0) {
+                active_zero_timers++;
+              }
+            }
+
+            const bool reached_zero = active_zero_timers > previous_active_zero_timers;
+            previous_active_zero_timers = active_zero_timers;
+            return reached_zero;
+        then:
+          - switch.turn_on: timer_ringing
   on_alarm_finished:
     - switch.turn_on: timer_ringing
   on_alarm_started:
